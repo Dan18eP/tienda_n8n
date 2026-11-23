@@ -15,7 +15,7 @@
     {
       "parameters": {
         "promptType": "define",
-        "text": "={{ $json.chatInput || $json.body?.message?.text || $json.message?.text || $json.body?.text || $json.text }}",
+        "text": "={{ $json.chatInput || $json.text }}",
         "options": {
           "systemMessage": "Eres el asistente de inventario de la Tienda La Esquina (Doña Rosa). Tu tarea es responder consultas de existencias y registrar entradas y salidas de mercancía.\n\nReglas obligatorias:\n1. Antes de afirmar cuánto hay de algo, usa consultar_producto. NUNCA respondas de memoria.\n2. Antes de registrar, consulta el producto para obtener su nombre exacto del catálogo y pásalo a registrar_movimiento. Así evitas que términos como 'leches' fallen.\n3. Registra una entrada cuando llega mercancía ('llegó', 'me trajeron', 'compré al proveedor') y una salida cuando se vende o se daña.\n4. La cantidad debe ser un número entero positivo. Si no está clara, pregunta antes de registrar.\n5. Si la herramienta no devuelve filas, el producto no existe en el catálogo: dilo con claridad y no inventes.\n6. Si la herramienta responde con un error de stock (violates check constraint productos_stock_check), explica que no hay unidades suficientes y muestra el stock actual.\n7. Responde en máximo 2 frases y termina siempre informando el stock final del producto.\n/no_think",
           "retryOnFail": true
@@ -56,7 +56,7 @@
       "parameters": {
         "contextWindowLength": 5,
         "sessionIdType": "customKey",
-        "sessionKey": "={{ $json.body?.message?.chat?.id || $json.sessionId || 'sesion-general' }}"
+        "sessionKey": "={{ $json.sessionId || 'sesion-general' }}"
       },
       "id": "p2a-004-memory",
       "name": "Simple Memory",
@@ -164,89 +164,6 @@
         840,
         80
       ]
-    },
-    {
-      "parameters": {
-        "httpMethod": "POST",
-        "path": "telegram-chat",
-        "responseMode": "responseNode",
-        "options": {}
-      },
-      "id": "p2a-008-tg-webhook",
-      "name": "Telegram Webhook",
-      "type": "n8n-nodes-base.webhook",
-      "typeVersion": 2,
-      "position": [
-        200,
-        520
-      ],
-      "webhookId": "telegram-chat"
-    },
-    {
-      "parameters": {
-        "conditions": {
-          "options": {
-            "caseSensitive": true,
-            "leftValue": "",
-            "typeValidation": "loose",
-            "version": 2
-          },
-          "conditions": [
-            {
-              "leftValue": "={{ String($('Telegram Webhook').item?.json?.body?.message?.chat?.id || $('Telegram Webhook').item?.json?.message?.chat?.id || '') }}",
-              "rightValue": "",
-              "operator": {
-                "type": "string",
-                "operation": "notEmpty"
-              }
-            }
-          ],
-          "combinator": "and"
-        },
-        "options": {}
-      },
-      "id": "p2a-009-if-tg",
-      "name": "¿Es Telegram?",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2.2,
-      "position": [
-        780,
-        340
-      ]
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "https://api.telegram.org/bot[REDACTED_TELEGRAM_TOKEN]/sendMessage",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ chat_id: $('Telegram Webhook').item?.json?.body?.message?.chat?.id || $('Telegram Webhook').item?.json?.message?.chat?.id, text: $json.output }) }}",
-        "options": {}
-      },
-      "id": "p2a-010-send-tg",
-      "name": "Enviar a Telegram",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        1020,
-        240
-      ],
-      "continueOnFail": true
-    },
-    {
-      "parameters": {
-        "respondWith": "json",
-        "responseBody": "={{ JSON.stringify({ status: 'ok', respuesta: $('Inventario').item.json.output }) }}",
-        "options": {}
-      },
-      "id": "p2a-011-resp-webhook",
-      "name": "Responder Webhook",
-      "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1.1,
-      "position": [
-        1240,
-        240
-      ]
     }
   ],
   "connections": {
@@ -300,51 +217,6 @@
           {
             "node": "Inventario",
             "type": "ai_tool",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Telegram Webhook": {
-      "main": [
-        [
-          {
-            "node": "Inventario",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Inventario": {
-      "main": [
-        [
-          {
-            "node": "¿Es Telegram?",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "¿Es Telegram?": {
-      "main": [
-        [
-          {
-            "node": "Enviar a Telegram",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        []
-      ]
-    },
-    "Enviar a Telegram": {
-      "main": [
-        [
-          {
-            "node": "Responder Webhook",
-            "type": "main",
             "index": 0
           }
         ]
