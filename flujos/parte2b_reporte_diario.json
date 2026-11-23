@@ -209,21 +209,15 @@
       ]
     },
     {
-      "parameters": {
-        "httpMethod": "POST",
-        "path": "reporte-diario",
-        "responseMode": "onReceived",
-        "options": {}
-      },
-      "id": "p2b-011-webhook",
-      "name": "Webhook Manual",
-      "type": "n8n-nodes-base.webhook",
-      "typeVersion": 2,
+      "parameters": {},
+      "id": "p2b-000-manual",
+      "name": "Al hacer clic en Test",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
       "position": [
-        200,
-        520
-      ],
-      "webhookId": "reporte-diario"
+        220,
+        420
+      ]
     }
   ],
   "connections": {
@@ -304,7 +298,7 @@
         ]
       ]
     },
-    "Webhook Manual": {
+    "Al hacer clic en Test": {
       "main": [
         [
           {
