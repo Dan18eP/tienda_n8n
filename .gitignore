@@ -2,6 +2,8 @@
 IA/
 .planning/
 shared/
+*.zip
 *.log
-
-
+__pycache__/
+*.pyc
+test_*.png
