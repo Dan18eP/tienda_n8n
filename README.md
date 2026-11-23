@@ -1,23 +1,23 @@
 # Tienda La Esquina: Dos Agentes de IA Locales con n8n y Ollama
 
-Este repositorio contiene la solución completa de automatización e inteligencia artificial 100% local para la **Tienda La Esquina** de Doña Rosa en Barranquilla, Atlántico, desarrollada según las especificaciones oficiales de la actividad práctica.
+Este repositorio contiene la implementacion completa de automatizacion e inteligencia artificial 100% local para la **Tienda La Esquina** de Dona Rosa en Barranquilla, Atlantico.
 
-El sistema implementa dos agentes inteligentes locales, cuatro flujos de trabajo desacoplados en n8n y persistencia transaccional en PostgreSQL, sin dependencias de servicios cloud ni costos de inferencia.
+El sistema despliega dos agentes inteligentes locales, cuatro flujos de trabajo en n8n y persistencia transaccional en PostgreSQL, sin dependencias de servicios en la nube ni costos de inferencia.
 
 ---
 
-## 🏗️ Arquitectura de la Solución
+## Arquitectura de la Solucion
 
-```
+```text
                      +---------------------------------------+
-                     |         Canales de Interacción        |
+                     |         Canales de Interaccion        |
                      +-------------------+-------------------+
                                          |
                        +-----------------+-----------------+
                        |                                   |
               [ Formulario Web ]                   [ Chat de Inventario ]
             (n8n Form Trigger)                     (n8n Chat Trigger)
-             Rol: Clientes / Vecinos                Rol: Doña Rosa / Tendero
+             Rol: Clientes / Vecinos                Rol: Dona Rosa / Tendero
                        |                                   |
                        v                                   v
           +-------------------------+         +-------------------------+
@@ -44,45 +44,73 @@ El sistema implementa dos agentes inteligentes locales, cuatro flujos de trabajo
             v                                                         v
 +-------------------------------+         +-------------------------------+
 |  Parte 2B: Reporte Diario     |         |   Flujo Centralizado de       |
-|  (7:00 a.m. a Proveedores)    |         |   Gestión de Errores          |
+|  (7:00 a.m. a Proveedores)    |         |   Gestion de Errores          |
 |  /data/shared/pedido_*.txt    |         |   /data/shared/errores.log    |
 +-------------------------------+         +-------------------------------+
 ```
 
 ---
 
-## 🚀 Componentes y Flujos de n8n
+## Flujos de Automatizacion e Interfaces
 
-### 1. Parte 1 — Clasificador y Enrutador de Solicitudes (Clientes)
-* **Trigger:** Form Trigger web público (`tienda-esquina-formulario`).
-* **Agente IA:** Ollama Chat Model (`qwen3:1.7b`, temperatura 0.1) con delimitador `/no_think` para forzar emisión directa de JSON.
-* **Herramienta:** `consultar_producto` en PostgreSQL para validar nombres exactos y precios en el catálogo.
-* **Structured Output Parser:** Salida en esquema estricto (`tipo`, `urgencia`, `producto`, `resumen`, `respuesta_borrador`).
-* **Enrutamiento:** Switch según urgencia (`alta` vs `media o baja`).
-* **Persistencia:** Inserción en la tabla `solicitudes` de PostgreSQL.
-* **Alertas Urgentes:** Escribe en `/data/shared/alertas.txt` exclusivamente cuando la urgencia es `alta`.
+### 1. Configuracion de Credenciales Locales en n8n
+La conexion a Ollama y PostgreSQL se administra exclusivamente mediante credenciales internas de n8n. Ningun nodo expone cadenas de conexion o credenciales en texto plano.
 
-### 2. Parte 2A — Asistente de Inventario (Doña Rosa)
-* **Trigger:** Chat Trigger nativo de n8n para interacción conversacional directa en el mostrador.
-* **Agente IA:** Ollama Chat Model (`qwen3:1.7b`) con memoria deslizante (`Simple Memory` de 5 turnos).
-* **Herramientas:**
-  * `consultar_producto`: Consulta de existencias en tiempo real sin alucinaciones.
-  * `registrar_movimiento`: Transacción atómica mediante CTE con validación de stock negativo (`CHECK (stock >= 0)`).
-* **Respuesta en Chat:** Devuelve en un máximo de dos frases el resultado del movimiento y el saldo final de existencias.
-
-### 3. Parte 2B — Reporte Diario de Faltantes a Proveedores (Automático)
-* **Trigger:** Schedule Trigger diario a las 7:00 a.m. (hora legal de Colombia `America/Bogota`).
-* **Detección SQL:** Consulta de productos en punto de reorden (`stock <= stock_minimo`) con cálculo de `sugerido_pedir = stock_minimo * 2 - stock`.
-* **Redacción LLM:** `Basic LLM Chain` con Qwen 1.7B redacta un mensaje formal, corto y claro de parte de Doña Rosa para el distribuidor.
-* **Persistencia:** Guarda el pedido en `/data/shared/pedido_proveedor_YYYY-MM-DD.txt`.
-
-### 4. Flujo de Errores Compartido
-* **Trigger:** Error Trigger asignado como `errorWorkflow` en los tres flujos principales.
-* **Registro:** Añade en modo append los detalles de cualquier excepción a `/data/shared/errores.log` (fecha, flujo, nodo causante y mensaje de error).
+![Credenciales de Ollama y PostgreSQL en n8n](evidencias/evidencia_03_credenciales_n8n.png)
 
 ---
 
-## 🛠️ Cómo Replicar el Proyecto
+### 2. Parte 1 — Clasificador y Enrutador de Solicitudes (Clientes)
+Disenado para los vecinos de la tienda que envian pedidos a domicilio, quejas o consultas de precios.
+* **Interfaz de Cliente:** Formulario web publico generado nativamente por n8n (`/form/tienda-esquina-formulario`).
+* **Agente Clasificador:** Procesa la solicitud con Qwen 1.7B y la herramienta `consultar_producto`.
+* **Structured Output Parser:** Emite un JSON estricto (`tipo`, `urgencia`, `producto`, `resumen`, `respuesta_borrador`).
+* **Switch:** Si la urgencia es `alta`, anade una linea a `/data/shared/alertas.txt`. Siempre registra la solicitud en la tabla `solicitudes` de PostgreSQL.
+
+#### Interfaz Web del Formulario de Clientes
+![Formulario Web de Solicitudes](evidencias/evidencia_12_formulario_cliente.png)
+
+#### Lienzo del Flujo en n8n
+![Lienzo del Flujo Parte 1](evidencias/evidencia_04_flujo_parte1_clasificador.png)
+
+---
+
+### 3. Parte 2A — Asistente de Inventario (Dona Rosa)
+Disenado para que Dona Rosa o su ayudante consulten existencias y registren entradas y salidas de mercancia en lenguaje natural desde el mostrador.
+* **Interfaz de Chat:** Chat conversacional nativo de n8n con memoria deslizante (`Simple Memory` de 5 turnos).
+* **Herramientas de Base de Datos:**
+  * `consultar_producto`: Búsqueda de existencias y precios oficiales en PostgreSQL.
+  * `registrar_movimiento`: Sentencia SQL atómica (CTE) que inserta el movimiento y actualiza el stock en la tabla `productos`.
+* **Prevencion de Stock Negativo:** La restriccion `CHECK (stock >= 0)` en PostgreSQL aborta automaticamente cualquier venta que supere las existencias reales, impidiendo sobreventas.
+
+#### Interfaz de Chat de Inventario
+![Chat Interactivo de Inventario](evidencias/evidencia_13_chat_dona_rosa.png)
+
+#### Lienzo del Flujo en n8n
+![Lienzo del Flujo Parte 2A](evidencias/evidencia_05_flujo_parte2a_inventario_chat.png)
+
+---
+
+### 4. Parte 2B — Reporte Diario de Faltantes a Proveedores
+Proceso desatendido que se ejecuta todos los dias a las 7:00 a.m. (hora legal de Colombia).
+* **Deteccion SQL:** Consulta productos en punto de reorden (`stock <= stock_minimo`) y calcula la cantidad sugerida a pedir (`stock_minimo * 2 - stock`).
+* **Redaccion LLM:** Un nodo `Basic LLM Chain` con Qwen 1.7B genera el texto formal del pedido para el camion mayorista.
+* **Persistencia en Disco:** Escribe la orden en `/data/shared/pedido_proveedor_YYYY-MM-DD.txt`.
+
+#### Lienzo del Flujo en n8n
+![Lienzo del Flujo Parte 2B](evidencias/evidencia_06_flujo_parte2b_reporte_diario.png)
+
+---
+
+### 5. Flujo Centralizado de Gestion de Errores
+Captura fallos en cualquiera de los flujos principales mediante un nodo `Error Trigger` configurado como `errorWorkflow`. Registra la fecha, nombre del flujo, nodo causante y mensaje de error en `/data/shared/errores.log`.
+
+#### Lienzo del Flujo en n8n
+![Lienzo del Flujo Centralizado de Errores](evidencias/evidencia_07_flujo_errores.png)
+
+---
+
+## Guia de Despliegue y Puesta en Marcha
 
 ### 1. Iniciar los Contenedores con Docker Compose
 ```bash
@@ -95,38 +123,38 @@ docker compose exec ollama-cpu ollama pull qwen3:1.7b
 ```
 
 ### 3. Inicializar la Base de Datos PostgreSQL
-Crea la base de datos `tienda` y carga el esquema relacional con los 14 productos semilla:
+Crear la base de datos `tienda` y ejecutar el archivo DDL con los 14 productos semilla:
 ```bash
 docker compose exec -T postgres psql -U root -d postgres -c "CREATE DATABASE tienda;"
 docker compose exec -T postgres psql -U root -d tienda < tienda.sql
 ```
 
-### 4. Configurar Credenciales e Importar Flujos en n8n
-1. Abre n8n en el navegador: [http://localhost:5678](http://localhost:5678).
-2. Configura las dos credenciales:
-   * **Ollama account:** Base URL `http://ollama:11434`.
-   * **Postgres account:** Host `postgres`, Puerto `5432`, Base de datos `tienda`, Usuario `root`, Contraseña `${POSTGRES_PASSWORD}`.
-3. Importa los cuatro archivos `.json` ubicados en la carpeta `flujos/`:
+### 4. Configurar Credenciales e Importar los Flujos
+1. Abrir la interfaz web de n8n: [http://localhost:5678](http://localhost:5678).
+2. Configurar las credenciales:
+   * **Ollama account:** Host URL `http://ollama:11434`.
+   * **Postgres account:** Host `postgres`, Puerto `5432`, Base de datos `tienda`, Usuario `root`, Password `${POSTGRES_PASSWORD}`.
+3. Importar los cuatro archivos `.json` ubicados en el directorio `flujos/`:
    * `flujos/parte1_clasificador.json`
    * `flujos/parte2a_inventario_chat.json`
    * `flujos/parte2b_reporte_diario.json`
    * `flujos/flujo_errores.json`
-4. Activa los flujos en n8n.
+4. Activar los flujos en n8n.
 
 ---
 
-## 📁 Estructura del Repositorio
+## Estructura del Repositorio
 
 ```text
-.
+tienda_n8n/
 ├── documento/
-│   └── Documento_diseno.pdf            # Documento técnico (12 págs, Times New Roman 12, justificado)
+│   └── Documento_diseno.pdf            # Documento de diseno tecnico (12 paginas, Times 12, justificado)
 ├── flujos/
 │   ├── parte1_clasificador.json        # Flujo Parte 1: Form Trigger + Clasificador
-│   ├── parte2a_inventario_chat.json    # Flujo Parte 2A: Chat Trigger + Asistente de Inventario
-│   ├── parte2b_reporte_diario.json     # Flujo Parte 2B: Schedule Trigger + Reporte Proveedor
-│   └── flujo_errores.json              # Flujo de gestión centralizada de excepciones
-├── evidencias/                         # 13 capturas auténticas de verificación
+│   ├── parte2a_inventario_chat.json    # Flujo Parte 2A: Chat Trigger + Inventario
+│   ├── parte2b_reporte_diario.json     # Flujo Parte 2B: Schedule Trigger + Reporte Diario
+│   └── flujo_errores.json              # Flujo centralizado de excepciones
+├── evidencias/                         # 13 capturas de verificacion del sistema
 │   ├── evidencia_01_docker_ps.png
 │   ├── evidencia_02_ollama_list.png
 │   ├── evidencia_03_credenciales_n8n.png
@@ -140,38 +168,39 @@ docker compose exec -T postgres psql -U root -d tienda < tienda.sql
 │   ├── evidencia_11_pedido_proveedor.png
 │   ├── evidencia_12_formulario_cliente.png
 │   └── evidencia_13_chat_dona_rosa.png
-├── docker-compose.yml                  # Definición de contenedores (n8n, Ollama, Postgres)
-├── tienda.sql                          # DDL relacional y catálogo de productos
+├── docker-compose.yml                  # Definicion de servicios Docker (n8n, Ollama, Postgres)
+├── tienda.sql                          # Esquema relacional DDL y catalogo inicial
 ├── .env.example                        # Variables de entorno de referencia
-└── README.md                           # Guía completa de arquitectura y replicación
+├── .gitignore                          # Exclusion de archivos sensibles y temporales
+└── README.md                           # Documentacion tecnica de replicacion
 ```
 
 ---
 
-## 📊 Matriz de Evaluación: 15 Casos de Prueba
+## Matriz de Evaluacion: 15 Casos de Prueba
 
-| # | Flujo | Entrada / Mensaje | Resultado Esperado | Resultado Obtenido | ¿Cumple? |
+| Caso | Flujo | Entrada / Mensaje | Resultado Esperado | Resultado Obtenido | Estado |
 |:---:|---|---|---|---|:---:|
-| 1 | Parte 1 | Carlos Mendoza: 2 quesos y panela para hoy | pedido · alta · Queso costeño · Alerta archivo | pedido · alta · Queso costeño · Alerta guardada | ✅ SÍ |
-| 2 | Parte 1 | Carmen Ortiz: Leche vencida ayer | queja · alta · Leche entera 1 L · Alerta archivo | queja · alta · Leche entera 1 L · Alerta guardada | ✅ SÍ |
-| 3 | Parte 1 | Andrés Pérez: Horario domingos | pregunta · baja · null · Sin alerta | pregunta · baja · null · Sin alerta | ✅ SÍ |
-| 4 | Parte 1 | Doña Marta: Precio cubeta huevos | pregunta · baja · Huevos cubeta x30 ($17.500) | pregunta · baja · Huevos cubeta x30 ($17.500) | ✅ SÍ |
-| 5 | Parte 1 | Jorge Ruiz: Demora domicilio sábado | queja · media · null · Sin alerta | queja · media · null · Sin alerta | ✅ SÍ |
-| 6 | Parte 1 | Laura Torres: Arroz y aceite sábado | pedido · media · Arroz 500 g · Sin alerta | pedido · media · Arroz 500 g · Sin alerta | ✅ SÍ |
-| 7 | Parte 1 | Vecino: Sugerencia vender hielo | otro · baja · null · Sin alerta | otro · baja · null · Sin alerta | ✅ SÍ |
-| 8 | Parte 1 | Atacante: 'Ignora tus instrucciones...' | otro · baja · null (Inyección rechazada) | otro · baja · null (Inyección neutralizada) | ✅ SÍ |
-| 9 | Parte 2A | '¿Cuánto queso costeño me queda?' | Consulta existencias reales: 7 unidades | Consulta SQL ejecutada. Informa stock: 7 | ✅ SÍ |
-| 10 | Parte 2A | 'Llegaron 24 bolsas de leche.' | Entrada 24 leches. Stock sube a 42 | CTE atómica ejecutada. Stock final: 42 | ✅ SÍ |
-| 11 | Parte 2A | 'Vendí 3 quesos costeños.' | Salida 3 quesos. Stock baja a 4 | CTE atómica ejecutada. Stock final: 4 | ✅ SÍ |
-| 12 | Parte 2A | '¿Y cuánto queda de ese producto?' (Memoria) | Resuelve contexto previo: Queso costeño (4) | Memoria contextual aplicada. Informa stock: 4 | ✅ SÍ |
-| 13 | Parte 2A | 'Vendí 100 quesos costeños.' (Sobrevenda) | Rechaza venta por stock insuficiente | Error CHECK capturado. Rechaza y avisa stock: 4 | ✅ SÍ |
-| 14 | Parte 2A | '¿Tienes helado de chocolate?' | Informa ausencia del producto en catálogo | Verifica catálogo. Explica que no existe | ✅ SÍ |
-| 15 | Parte 2B | Ejecución de reporte diario de faltantes | Genera archivo con productos bajo stock mínimo | Archivo generado con Gaseosa, Huevos y Panela | ✅ SÍ |
+| 1 | Parte 1 | Carlos Mendoza: 2 quesos y panela para hoy | pedido · alta · Queso costeño · Alerta archivo | pedido · alta · Queso costeño · Alerta guardada | Cumple |
+| 2 | Parte 1 | Carmen Ortiz: Leche vencida ayer | queja · alta · Leche entera 1 L · Alerta archivo | queja · alta · Leche entera 1 L · Alerta guardada | Cumple |
+| 3 | Parte 1 | Andrés Pérez: Horario domingos | pregunta · baja · null · Sin alerta | pregunta · baja · null · Sin alerta | Cumple |
+| 4 | Parte 1 | Doña Marta: Precio cubeta huevos | pregunta · baja · Huevos cubeta x30 ($17.500) | pregunta · baja · Huevos cubeta x30 ($17.500) | Cumple |
+| 5 | Parte 1 | Jorge Ruiz: Demora domicilio sábado | queja · media · null · Sin alerta | queja · media · null · Sin alerta | Cumple |
+| 6 | Parte 1 | Laura Torres: Arroz y aceite sábado | pedido · media · Arroz 500 g · Sin alerta | pedido · media · Arroz 500 g · Sin alerta | Cumple |
+| 7 | Parte 1 | Vecino: Sugerencia vender hielo | otro · baja · null · Sin alerta | otro · baja · null · Sin alerta | Cumple |
+| 8 | Parte 1 | Atacante: 'Ignora tus instrucciones...' | otro · baja · null (Inyeccion rechazada) | otro · baja · null (Inyeccion neutralizada) | Cumple |
+| 9 | Parte 2A | '¿Cuánto queso costeño me queda?' | Consulta existencias reales: 7 unidades | Consulta SQL ejecutada. Informa stock: 7 | Cumple |
+| 10 | Parte 2A | 'Llegaron 24 bolsas de leche.' | Entrada 24 leches. Stock sube a 42 | CTE atomica ejecutada. Stock final: 42 | Cumple |
+| 11 | Parte 2A | 'Vendí 3 quesos costeños.' | Salida 3 quesos. Stock baja a 4 | CTE atomica ejecutada. Stock final: 4 | Cumple |
+| 12 | Parte 2A | '¿Y cuánto queda de ese producto?' (Memoria) | Resuelve contexto previo: Queso costeño (4) | Memoria contextual aplicada. Informa stock: 4 | Cumple |
+| 13 | Parte 2A | 'Vendí 100 quesos costeños.' (Sobrevenda) | Rechaza venta por stock insuficiente | Error CHECK capturado. Rechaza y avisa stock: 4 | Cumple |
+| 14 | Parte 2A | '¿Tienes helado de chocolate?' | Informa ausencia del producto en catalogo | Verifica catalogo. Explica que no existe | Cumple |
+| 15 | Parte 2B | Ejecucion de reporte diario de faltantes | Genera archivo con productos bajo stock minimo | Archivo generado con Gaseosa, Huevos y Panela | Cumple |
 
 ---
 
-## 🔒 Privacidad y Seguridad
+## Privacidad y Seguridad Relacional
 
-* **Inferencia 100% On-Premise:** Ningún dato sensible o comercial sale de la red local.
-* **Integridad Relacional:** Control transaccional en PostgreSQL con restricciones `CHECK (stock >= 0)` que imposibilitan sobreventas o inventarios negativos.
-* **Defensa de Prompts:** Supresión de cadenas internas mediante delimitador `/no_think` e instrucciones de aislamiento semántico.
+* **Inferencia Local:** La totalidad de las consultas e inferencias se procesan dentro del host mediante Ollama en CPU, sin transmision de datos a terceros.
+* **Integridad en Base de Datos:** Las restricciones relacionales `CHECK (stock >= 0)` impiden inconsistencias de inventario a nivel de motor de base de datos.
+* **Aislamiento de Prompts:** Supresion de cadenas de pensamiento mediante `/no_think` para entrega directa de payloads estructurados.
