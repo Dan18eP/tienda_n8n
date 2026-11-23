@@ -17,7 +17,7 @@
         "promptType": "define",
         "text": "={{ $json.chatInput || $json.text }}",
         "options": {
-          "systemMessage": "Eres el asistente de inventario de la Tienda La Esquina (Doña Rosa). Tu trabajo es responder consultas de existencias y registrar movimientos en tiempo real.\n\nREGLAS DE ORO:\n1. Para saber existencias o precios ('¿cuántos hay?', '¿a qué precio?', '¿tienen leche?', 'cuánta leche tenemos'): llama a consultar_producto con la palabra clave en singular (ej: 'leche', 'queso', 'panela').\n2. Para registrar ventas o salidas ('véndeme', 'vendí', 'salió', 'se llevó', 'me quiere comprar'): llama a registrar_movimiento con (producto, 'salida', cantidad).\n3. Para registrar llegadas de mercancía ('llegaron', 'trajeron', 'compré'): llama a registrar_movimiento con (producto, 'entrada', cantidad).\n4. Interpretación de resultados de registrar_movimiento:\n   - Si resultado es 'exito': confirma el movimiento y el stock_actual del producto indicado en el campo 'nombre'.\n   - Si resultado es 'error_stock_insuficiente': explica amablemente que no hay suficientes unidades del producto indicado en 'nombre' (ej: 'No hay suficientes unidades de Leche entera 1 L') y di que solo quedan 'stock_actual' unidades.\n5. Memoria contextual: Si el usuario dice \"véndeme 2 de esas\" o \"100 de esa\", mira qué producto se mencionó en el turno inmediatamente anterior y usa ese producto. Nombra SIEMPRE el producto actual en tu respuesta, nunca nombres de productos de turnos antiguos.\n6. NUNCA escribas etiquetas de texto como <tool> o </tool>.\n7. Responde en máximo 2 frases claras para Doña Rosa.\n/no_think",
+          "systemMessage": "Eres el asistente de inventario de la Tienda La Esquina (Doña Rosa). Tu única función es consultar existencias reales en la base de datos y registrar movimientos de inventario.\n\nREGLAS ESTRICTAS DE OPERACIÓN:\n1. CONSULTA OBLIGATORIA: Para saber existencias, disponibilidad o precios ('¿cuántos hay?', '¿a qué precio?', '¿tienen leche?', 'cuánta leche tenemos', 'cuánto queso costeño tenemos'), DEBES invocar SIEMPRE la herramienta consultar_producto.\n   - ESTÁ PROHIBIDO responder existencias o precios de memoria o usando datos de productos de mensajes anteriores.\n   - Pasa a consultar_producto la palabra clave del producto (ej: 'queso costeño', 'leche', 'panela').\n2. MOVIMIENTOS OBLIGATORIOS: Para ventas o salidas ('véndeme', 'quiero 10 de esos', 'vendí', 'se llevó', 'salió'), invoca registrar_movimiento con (producto, 'salida', cantidad). Para llegadas de mercancía ('llegaron', 'trajeron'), invoca registrar_movimiento con (producto, 'entrada', cantidad).\n3. FIDELIDAD DE NOMBRES (ANTI-ALUCINACIÓN):\n   - Usa ÚNICAMENTE el campo 'nombre' EXACTO que devuelve la base de datos (ej: 'Queso costeño 500 g', 'Leche entera 1 L', 'Panela 500 g').\n   - NUNCA mezcles palabras de diferentes productos (ej: jamás digas 'Queso entero').\n4. RESOLUCIÓN DE PRONOMBRES: Si el usuario dice 'quiero 10 de esos' o 'véndeme 2 de esas', toma el producto consultado en el turno inmediatamente anterior.\n5. INTERPRETACIÓN DE MOVIMIENTOS:\n   - Si resultado es 'exito': confirma la operación y el stock_actual del producto exacto.\n   - Si resultado es 'error_stock_insuficiente': informa que no hay suficientes unidades de ese producto exacto y cuántas quedan en stock_actual.\n6. Responde SIEMPRE en español, en máximo 2 frases breves y cordiales para Doña Rosa.\n/no_think",
           "retryOnFail": true
         }
       },
@@ -54,7 +54,7 @@
     },
     {
       "parameters": {
-        "contextWindowLength": 5,
+        "contextWindowLength": 2,
         "sessionIdType": "customKey",
         "sessionKey": "={{ $json.sessionId || 'sesion-general' }}"
       },
@@ -70,11 +70,11 @@
     {
       "parameters": {
         "descriptionType": "manual",
-        "toolDescription": "Busca productos por nombre o palabra clave (ej: queso, leche, panela). Devuelve nombre exacto, precio, stock actual y stock mínimo.",
+        "toolDescription": "Busca un producto en la base de datos por nombre o palabra clave (ej: queso costeño, leche, panela). Devuelve el nombre exacto, precio, stock actual y stock mínimo.",
         "operation": "executeQuery",
-        "query": "SELECT nombre, precio, stock, stock_minimo\nFROM productos\nWHERE nombre ILIKE '%' || $1 || '%'\n   OR ' ' || $1 || ' ' ILIKE '% ' || split_part(nombre, ' ', 1) || ' %'\n   OR split_part(nombre, ' ', 1) ILIKE '%' || split_part($1, ' ', 1) || '%'\n   OR nombre ILIKE '%' || replace(replace(replace($1, 'quesos', 'queso'), 'panelas', 'panela'), 'leches', 'leche') || '%'\nORDER BY (CASE WHEN nombre ILIKE '%' || $1 || '%' THEN 1 ELSE 2 END), nombre\nLIMIT 5;",
+        "query": "SELECT nombre, precio, stock, stock_minimo\nFROM productos\nWHERE nombre ILIKE '%' || replace(replace(replace(lower($1), 'quesos', 'queso'), 'panelas', 'panela'), 'leches', 'leche') || '%'\n   OR lower(nombre) ILIKE '%' || lower(split_part($1, ' ', 1)) || '%'\nORDER BY \n  CASE \n    WHEN lower(nombre) = lower($1) THEN 1\n    WHEN lower(nombre) LIKE lower($1) || '%' THEN 2\n    WHEN lower(nombre) LIKE '%' || lower($1) || '%' THEN 3\n    ELSE 4 \n  END, \n  length(nombre)\nLIMIT 1;",
         "options": {
-          "queryReplacement": "={{ $fromAI('producto', 'palabra clave del producto en singular (ej: queso, leche, panela)', 'string') }}"
+          "queryReplacement": "={{ $fromAI('producto', 'palabra clave del producto (ej: queso costeño, leche, panela)', 'string') }}"
         }
       },
       "id": "p2a-005-tool-cons",
@@ -97,9 +97,9 @@
         "descriptionType": "manual",
         "toolDescription": "Registra una entrada o salida de inventario. Devuelve el nombre del producto, tipo, cantidad, stock_actual y resultado ('exito' o 'error_stock_insuficiente').",
         "operation": "executeQuery",
-        "query": "WITH p AS (\n SELECT id, nombre, stock FROM productos\n WHERE nombre ILIKE '%' || $1 || '%'\n    OR ' ' || $1 || ' ' ILIKE '% ' || split_part(nombre, ' ', 1) || ' %'\n    OR split_part(nombre, ' ', 1) ILIKE '%' || split_part($1, ' ', 1) || '%'\n    OR nombre ILIKE '%' || replace(replace(replace($1, 'quesos', 'queso'), 'panelas', 'panela'), 'leches', 'leche') || '%'\n ORDER BY (CASE WHEN nombre ILIKE '%' || $1 || '%' THEN 1 ELSE 2 END), length(nombre)\n LIMIT 1\n), upd AS (\n UPDATE productos pr\n SET stock = pr.stock + (CASE WHEN $2::text = 'entrada' THEN $3::int ELSE -$3::int END)\n FROM p\n WHERE pr.id = p.id AND (\n   $2::text = 'entrada' OR pr.stock >= $3::int\n )\n RETURNING pr.id, pr.nombre, $2::text AS tipo, $3::int AS cantidad, pr.stock AS stock_actual, 'exito'::text AS resultado\n), ins AS (\n INSERT INTO movimientos (producto_id, tipo, cantidad, nota)\n SELECT id, tipo, cantidad, 'registrado por el asistente' FROM upd\n)\nSELECT nombre, tipo, cantidad, stock_actual, resultado\nFROM upd\nUNION ALL\nSELECT p.nombre, $2::text, $3::int, p.stock, 'error_stock_insuficiente'::text\nFROM p\nWHERE NOT EXISTS (SELECT 1 FROM upd);",
+        "query": "WITH p AS (\n SELECT id, nombre, stock FROM productos\n WHERE nombre ILIKE '%' || replace(replace(replace(lower($1), 'quesos', 'queso'), 'panelas', 'panela'), 'leches', 'leche') || '%'\n    OR lower(nombre) ILIKE '%' || lower(split_part($1, ' ', 1)) || '%'\n ORDER BY \n   CASE \n     WHEN lower(nombre) = lower($1) THEN 1\n     WHEN lower(nombre) LIKE lower($1) || '%' THEN 2\n     WHEN lower(nombre) LIKE '%' || lower($1) || '%' THEN 3\n     ELSE 4 \n   END, \n   length(nombre)\n LIMIT 1\n), upd AS (\n UPDATE productos pr\n SET stock = pr.stock + (CASE WHEN $2::text = 'entrada' THEN $3::int ELSE -$3::int END)\n FROM p\n WHERE pr.id = p.id AND (\n   $2::text = 'entrada' OR pr.stock >= $3::int\n )\n RETURNING pr.id, pr.nombre, $2::text AS tipo, $3::int AS cantidad, pr.stock AS stock_actual, 'exito'::text AS resultado\n), ins AS (\n INSERT INTO movimientos (producto_id, tipo, cantidad, nota)\n SELECT id, tipo, cantidad, 'registrado por el asistente' FROM upd\n)\nSELECT nombre, tipo, cantidad, stock_actual, resultado\nFROM upd\nUNION ALL\nSELECT p.nombre, $2::text, $3::int, p.stock, 'error_stock_insuficiente'::text\nFROM p\nWHERE NOT EXISTS (SELECT 1 FROM upd);",
         "options": {
-          "queryReplacement": "={{ [ $fromAI('producto', 'nombre o palabra clave del producto (ej: queso, leche, panela)', 'string'), $fromAI('tipo', 'entrada si llega mercancía, salida si se vende o daña', 'string'), $fromAI('cantidad', 'número entero positivo de unidades', 'number') ] }}"
+          "queryReplacement": "={{ [ $fromAI('producto', 'nombre o palabra clave del producto (ej: queso costeño, leche, panela)', 'string'), $fromAI('tipo', 'entrada si llega mercancía, salida si se vende o daña', 'string'), $fromAI('cantidad', 'número entero positivo de unidades', 'number') ] }}"
         }
       },
       "id": "p2a-006-tool-mov",
