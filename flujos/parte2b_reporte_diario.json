@@ -93,7 +93,8 @@
     },
     {
       "parameters": {
-        "prompt": "={{ \"Eres el asistente de la Tienda La Esquina. Redacta un mensaje formal, corto y amable de parte de Doña Rosa para el proveedor de abarrotes solicitando los siguientes productos faltantes y sus cantidades calculadas:\\n\" + JSON.stringify($json.productos_faltantes) + \"\\n\\nUsa únicamente las cantidades exactas indicadas en 'sugerido_pedir'. No inventes productos ni cantidades.\\n/no_think\" }}"
+        "promptType": "define",
+        "text": "={{ \"Eres el asistente de la Tienda La Esquina. Redacta un mensaje formal, corto y amable de parte de Doña Rosa para el proveedor de abarrotes solicitando los siguientes productos faltantes y sus cantidades calculadas:\\n\" + JSON.stringify($json.productos_faltantes) + \"\\n\\nUsa únicamente las cantidades exactas indicadas en 'sugerido_pedir'. No inventes productos ni cantidades.\\n/no_think\" }}"
       },
       "id": "p2b-005-chain",
       "name": "Basic LLM Chain",
@@ -206,6 +207,23 @@
         1040,
         80
       ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "reporte-diario",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "p2b-011-webhook",
+      "name": "Webhook Manual",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        200,
+        520
+      ],
+      "webhookId": "reporte-diario"
     }
   ],
   "connections": {
@@ -280,6 +298,17 @@
         [
           {
             "node": "Guardar Pedido en Disco",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook Manual": {
+      "main": [
+        [
+          {
+            "node": "Stock bajo",
             "type": "main",
             "index": 0
           }
