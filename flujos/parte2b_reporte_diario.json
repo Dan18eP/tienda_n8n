@@ -1,0 +1,295 @@
+{
+  "name": "Parte 2B - Reporte diario de faltantes",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 7 * * *"
+            }
+          ]
+        }
+      },
+      "id": "p2b-001-schedule",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        200,
+        340
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT nombre, stock, stock_minimo,\n (stock_minimo * 2 - stock) AS sugerido_pedir\nFROM productos\nWHERE stock <= stock_minimo\nORDER BY nombre;",
+        "options": {
+          "alwaysOutputData": true
+        }
+      },
+      "id": "p2b-002-db",
+      "name": "Stock bajo",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        420,
+        340
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "UZwcGmvVHjz11CiX",
+          "name": "Postgres tienda"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.nombre }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "p2b-003-if",
+      "name": "¿Hay faltantes?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        640,
+        340
+      ]
+    },
+    {
+      "parameters": {
+        "aggregate": "aggregateAllItemData",
+        "destinationFieldName": "productos_faltantes",
+        "options": {}
+      },
+      "id": "p2b-004-agg",
+      "name": "Aggregate",
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [
+        860,
+        340
+      ]
+    },
+    {
+      "parameters": {
+        "prompt": "={{ \"Eres el asistente de la Tienda La Esquina. Redacta un mensaje formal, corto y amable de parte de Doña Rosa para el proveedor de abarrotes solicitando los siguientes productos faltantes y sus cantidades calculadas:\\n\" + JSON.stringify($json.productos_faltantes) + \"\\n\\nUsa únicamente las cantidades exactas indicadas en 'sugerido_pedir'. No inventes productos ni cantidades.\\n/no_think\" }}"
+      },
+      "id": "p2b-005-chain",
+      "name": "Basic LLM Chain",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.7,
+      "position": [
+        1080,
+        340
+      ]
+    },
+    {
+      "parameters": {
+        "model": "qwen3:1.7b",
+        "options": {
+          "temperature": 0.1
+        }
+      },
+      "id": "p2b-006-ollama",
+      "name": "Ollama Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOllama",
+      "typeVersion": 1,
+      "position": [
+        1080,
+        560
+      ],
+      "credentials": {
+        "ollamaApi": {
+          "id": "TXLhRWjhWTkqcq9A",
+          "name": "Local Ollama service"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "toText",
+        "sourceProperty": "text",
+        "binaryPropertyName": "data"
+      },
+      "id": "p2b-007-convert",
+      "name": "Convert to File",
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [
+        1280,
+        340
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "write",
+        "fileName": "={{ \"/data/shared/pedido_proveedor_\" + $now.format('yyyy-MM-dd') + \".txt\" }}",
+        "dataPropertyName": "data",
+        "options": {
+          "append": false
+        }
+      },
+      "id": "p2b-008-file",
+      "name": "Guardar Pedido en Disco",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        1480,
+        340
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Bloque 1: Programación y Detección de Faltantes\nSchedule Trigger programado todos los días a las 7:00 a.m. (America/Bogota).\nEjecuta consulta SQL de stock bajo (`stock <= stock_minimo`) y calcula la cantidad sugerida (`stock_minimo * 2 - stock`).",
+        "height": 220,
+        "width": 380,
+        "color": 4
+      },
+      "id": "p2b-008-sticky1",
+      "name": "Nota Programación y Detección",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        180,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Bloque 2: Filtrado y Agrupación\nNodo IF verifica si hubo registros con nombre devuelto.\nNodo Aggregate reúne todas las filas de productos en un único arreglo para procesarlo en una sola invocación de LLM.",
+        "height": 220,
+        "width": 340,
+        "color": 5
+      },
+      "id": "p2b-009-sticky2",
+      "name": "Nota Filtrado y Agrupación",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        620,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Bloque 3: Redacción y Archivo de Pedido\nBasic LLM Chain con Qwen 1.7B redacta una solicitud amable para el proveedor usando estrictamente los datos calculados por SQL.\nGuarda el archivo en `/data/shared/pedido_proveedor_YYYY-MM-DD.txt`.",
+        "height": 220,
+        "width": 380,
+        "color": 7
+      },
+      "id": "p2b-010-sticky3",
+      "name": "Nota Redacción y Archivo",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1040,
+        80
+      ]
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Stock bajo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Stock bajo": {
+      "main": [
+        [
+          {
+            "node": "¿Hay faltantes?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Hay faltantes?": {
+      "main": [
+        [
+          {
+            "node": "Aggregate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate": {
+      "main": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ollama Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Basic LLM Chain": {
+      "main": [
+        [
+          {
+            "node": "Convert to File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Convert to File": {
+      "main": [
+        [
+          {
+            "node": "Guardar Pedido en Disco",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/Bogota"
+  },
+  "active": true
+}

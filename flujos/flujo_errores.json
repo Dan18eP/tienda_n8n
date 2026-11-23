@@ -1,0 +1,127 @@
+{
+  "name": "Flujo de Errores",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "e001-trigger",
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        260,
+        340
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "field-log",
+              "name": "logLine",
+              "value": "={{ $now.format('yyyy-MM-dd HH:mm:ss') }} | Flujo: {{ $json.workflow.name }} | Nodo: {{ $json.node.name }} | Mensaje: {{ $json.execution.error.message }}\n",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "e002-format",
+      "name": "Formatear Error",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        480,
+        340
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "toText",
+        "sourceProperty": "logLine",
+        "binaryPropertyName": "data"
+      },
+      "id": "e003-convert",
+      "name": "Convert to File",
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [
+        680,
+        340
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "write",
+        "fileName": "/data/shared/errores.log",
+        "dataPropertyName": "data",
+        "options": {
+          "append": true
+        }
+      },
+      "id": "e004-file",
+      "name": "Escribir en errores.log",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        880,
+        340
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Flujo Central de Gestión de Errores\nCaptura automáticamente las excepciones no controladas de los tres flujos del sistema (Parte 1, Parte 2A y Parte 2B) mediante Error Trigger.\nRegistra fecha, nombre del flujo, nodo causante y mensaje de error en `/data/shared/errores.log` en modo append.",
+        "height": 220,
+        "width": 540,
+        "color": 6
+      },
+      "id": "e005-sticky",
+      "name": "Nota Flujo Errores",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        240,
+        80
+      ]
+    }
+  ],
+  "connections": {
+    "Error Trigger": {
+      "main": [
+        [
+          {
+            "node": "Formatear Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Formatear Error": {
+      "main": [
+        [
+          {
+            "node": "Convert to File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Convert to File": {
+      "main": [
+        [
+          {
+            "node": "Escribir en errores.log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": true
+}
